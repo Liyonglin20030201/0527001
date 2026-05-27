@@ -1,0 +1,54 @@
+"""一键启动脚本：初始化ES索引 + 导入示例数据 + 启动Flask服务"""
+
+import sys
+import os
+
+sys.path.insert(0, os.path.dirname(__file__))
+
+from storage.importer import aggregate_restaurant_data, import_to_es
+from config import Config
+
+
+def init_data():
+    """初始化示例数据到ES"""
+    data_dir = os.path.join(os.path.dirname(__file__), "data")
+    restaurants_path = os.path.join(data_dir, "restaurants.jsonl")
+    reviews_path = os.path.join(data_dir, "reviews_analyzed.jsonl")
+
+    if not os.path.exists(restaurants_path):
+        print("错误：找不到餐厅数据文件")
+        return False
+
+    print("正在聚合数据...")
+    docs = aggregate_restaurant_data(restaurants_path, reviews_path)
+    print(f"聚合完成，共 {len(docs)} 家餐厅")
+
+    print("正在导入 Elasticsearch...")
+    count = import_to_es(docs)
+    print(f"成功导入 {count} 家餐厅")
+    return True
+
+
+def main():
+    print("=" * 50)
+    print("  餐厅智能推荐系统 - 启动")
+    print("=" * 50)
+
+    if "--init" in sys.argv or "--all" in sys.argv:
+        print("\n[1/2] 初始化数据...")
+        if not init_data():
+            print("数据初始化失败，请检查Elasticsearch是否启动")
+            if "--all" not in sys.argv:
+                sys.exit(1)
+    else:
+        print("\n跳过数据初始化（使用 --init 参数初始化）")
+
+    if "--no-server" not in sys.argv:
+        print(f"\n[2/2] 启动Flask服务 @ http://{Config.FLASK_HOST}:{Config.FLASK_PORT}")
+        print("按 Ctrl+C 停止服务\n")
+        from app import app
+        app.run(host=Config.FLASK_HOST, port=Config.FLASK_PORT, debug=Config.FLASK_DEBUG)
+
+
+if __name__ == "__main__":
+    main()

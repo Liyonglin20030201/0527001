@@ -1,0 +1,19 @@
+# Web Framework
+flask==3.0.0
+flask-cors==4.0.0
+
+# Crawler
+scrapy==2.11.0
+fake-useragent==1.4.0
+
+# NLP & Sentiment Analysis
+torch==2.1.0
+transformers==4.36.0
+jieba==0.42.1
+
+# Elasticsearch
+elasticsearch==8.11.0
+
+# Utilities
+python-dotenv==1.0.0
+gunicorn==21.2.0
