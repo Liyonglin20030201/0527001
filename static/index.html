@@ -1,0 +1,506 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>餐厅智能推荐</title>
+    <style>
+        * { margin: 0; padding: 0; box-sizing: border-box; }
+
+        body {
+            font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", "PingFang SC", "Hiragino Sans GB", "Microsoft YaHei", sans-serif;
+            background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+            min-height: 100vh;
+            padding: 40px 20px;
+        }
+
+        .container {
+            max-width: 900px;
+            margin: 0 auto;
+        }
+
+        .header {
+            text-align: center;
+            margin-bottom: 40px;
+            color: #fff;
+        }
+
+        .header h1 {
+            font-size: 2.2em;
+            margin-bottom: 8px;
+            text-shadow: 0 2px 4px rgba(0,0,0,0.2);
+        }
+
+        .header p {
+            font-size: 1.1em;
+            opacity: 0.9;
+        }
+
+        .search-box {
+            background: #fff;
+            border-radius: 16px;
+            padding: 24px 28px;
+            box-shadow: 0 20px 60px rgba(0,0,0,0.15);
+            margin-bottom: 30px;
+        }
+
+        .search-box label {
+            display: block;
+            font-size: 0.9em;
+            color: #666;
+            margin-bottom: 8px;
+        }
+
+        .input-row {
+            display: flex;
+            gap: 12px;
+        }
+
+        .input-row input {
+            flex: 1;
+            padding: 14px 18px;
+            border: 2px solid #e8e8e8;
+            border-radius: 10px;
+            font-size: 1em;
+            transition: border-color 0.3s;
+            outline: none;
+        }
+
+        .input-row input:focus {
+            border-color: #667eea;
+        }
+
+        .input-row button {
+            padding: 14px 32px;
+            background: linear-gradient(135deg, #667eea, #764ba2);
+            color: #fff;
+            border: none;
+            border-radius: 10px;
+            font-size: 1em;
+            font-weight: 600;
+            cursor: pointer;
+            transition: transform 0.2s, box-shadow 0.2s;
+        }
+
+        .input-row button:hover {
+            transform: translateY(-1px);
+            box-shadow: 0 4px 15px rgba(102,126,234,0.4);
+        }
+
+        .input-row button:active {
+            transform: translateY(0);
+        }
+
+        .input-row button:disabled {
+            opacity: 0.6;
+            cursor: not-allowed;
+            transform: none;
+        }
+
+        .examples {
+            margin-top: 12px;
+            font-size: 0.85em;
+            color: #999;
+        }
+
+        .examples span {
+            display: inline-block;
+            background: #f5f5f5;
+            padding: 4px 10px;
+            border-radius: 6px;
+            margin: 4px 4px 0 0;
+            cursor: pointer;
+            transition: background 0.2s;
+        }
+
+        .examples span:hover {
+            background: #e8e8ff;
+            color: #667eea;
+        }
+
+        .parsed-info {
+            background: #f8f9ff;
+            border-radius: 10px;
+            padding: 14px 18px;
+            margin-bottom: 24px;
+            display: none;
+        }
+
+        .parsed-info .tag {
+            display: inline-block;
+            padding: 4px 12px;
+            border-radius: 20px;
+            font-size: 0.82em;
+            font-weight: 500;
+            margin: 3px 4px;
+        }
+
+        .tag-flavor { background: #ffe8e8; color: #d63031; }
+        .tag-atmosphere { background: #e8f5e8; color: #27ae60; }
+        .tag-price { background: #fff3e0; color: #f39c12; }
+        .tag-category { background: #e8f0fe; color: #2980b9; }
+
+        .results {
+            display: flex;
+            flex-direction: column;
+            gap: 16px;
+        }
+
+        .result-card {
+            background: #fff;
+            border-radius: 14px;
+            padding: 22px 26px;
+            box-shadow: 0 4px 20px rgba(0,0,0,0.08);
+            transition: transform 0.2s, box-shadow 0.2s;
+        }
+
+        .result-card:hover {
+            transform: translateY(-2px);
+            box-shadow: 0 8px 30px rgba(0,0,0,0.12);
+        }
+
+        .card-header {
+            display: flex;
+            justify-content: space-between;
+            align-items: flex-start;
+            margin-bottom: 10px;
+        }
+
+        .card-header h3 {
+            font-size: 1.2em;
+            color: #333;
+        }
+
+        .match-score {
+            background: linear-gradient(135deg, #667eea, #764ba2);
+            color: #fff;
+            padding: 4px 10px;
+            border-radius: 8px;
+            font-size: 0.8em;
+            font-weight: 600;
+        }
+
+        .card-meta {
+            display: flex;
+            gap: 16px;
+            font-size: 0.88em;
+            color: #777;
+            margin-bottom: 12px;
+            flex-wrap: wrap;
+        }
+
+        .card-meta span::before {
+            margin-right: 4px;
+        }
+
+        .card-tags {
+            display: flex;
+            flex-wrap: wrap;
+            gap: 6px;
+            margin-bottom: 12px;
+        }
+
+        .card-tags span {
+            padding: 3px 10px;
+            background: #f0f0f0;
+            border-radius: 12px;
+            font-size: 0.78em;
+            color: #555;
+        }
+
+        .card-dishes {
+            border-top: 1px solid #f0f0f0;
+            padding-top: 12px;
+        }
+
+        .card-dishes h4 {
+            font-size: 0.85em;
+            color: #999;
+            margin-bottom: 8px;
+        }
+
+        .dish-item {
+            display: inline-flex;
+            align-items: center;
+            gap: 4px;
+            background: #f8f9ff;
+            padding: 4px 10px;
+            border-radius: 8px;
+            margin: 3px 4px 3px 0;
+            font-size: 0.82em;
+        }
+
+        .dish-rate {
+            color: #27ae60;
+            font-weight: 600;
+        }
+
+        .sentiment-bar {
+            display: flex;
+            align-items: center;
+            gap: 8px;
+            margin-top: 10px;
+        }
+
+        .sentiment-bar label {
+            font-size: 0.78em;
+            color: #999;
+            min-width: 36px;
+        }
+
+        .bar-track {
+            flex: 1;
+            height: 6px;
+            background: #eee;
+            border-radius: 3px;
+            overflow: hidden;
+        }
+
+        .bar-fill {
+            height: 100%;
+            border-radius: 3px;
+            transition: width 0.6s ease;
+        }
+
+        .bar-fill.positive { background: linear-gradient(90deg, #a8e063, #56ab2f); }
+        .bar-fill.neutral { background: #ffd93d; }
+        .bar-fill.negative { background: #ff6b6b; }
+
+        .empty-state {
+            text-align: center;
+            padding: 60px 20px;
+            color: #fff;
+            opacity: 0.8;
+        }
+
+        .empty-state p {
+            font-size: 1.1em;
+        }
+
+        .loading {
+            text-align: center;
+            padding: 40px;
+            color: #fff;
+        }
+
+        .loading::after {
+            content: "";
+            display: inline-block;
+            width: 24px;
+            height: 24px;
+            border: 3px solid rgba(255,255,255,0.3);
+            border-top-color: #fff;
+            border-radius: 50%;
+            animation: spin 0.8s linear infinite;
+            margin-left: 10px;
+            vertical-align: middle;
+        }
+
+        @keyframes spin {
+            to { transform: rotate(360deg); }
+        }
+
+        .error-msg {
+            background: #ffe8e8;
+            color: #d63031;
+            padding: 14px 18px;
+            border-radius: 10px;
+            margin-bottom: 20px;
+        }
+
+        @media (max-width: 600px) {
+            .input-row { flex-direction: column; }
+            .input-row button { width: 100%; }
+            body { padding: 20px 12px; }
+            .header h1 { font-size: 1.6em; }
+        }
+    </style>
+</head>
+<body>
+    <div class="container">
+        <div class="header">
+            <h1>餐厅智能推荐</h1>
+            <p>告诉我你想吃什么，帮你找到最合适的餐厅</p>
+        </div>
+
+        <div class="search-box">
+            <label>描述你的用餐需求</label>
+            <div class="input-row">
+                <input type="text" id="queryInput" placeholder="例如：想吃辣的安静餐厅，人均100左右" autocomplete="off">
+                <button id="searchBtn" onclick="doSearch()">推荐</button>
+            </div>
+            <div class="examples">
+                试试：
+                <span onclick="fillQuery('想吃辣的安静餐厅')">想吃辣的安静餐厅</span>
+                <span onclick="fillQuery('适合约会的日料，环境好')">适合约会的日料</span>
+                <span onclick="fillQuery('便宜的火锅，朋友聚餐')">便宜火锅聚餐</span>
+                <span onclick="fillQuery('清淡养生，人均80以下')">清淡养生</span>
+                <span onclick="fillQuery('带孩子吃饭，实惠')">带孩子吃饭</span>
+            </div>
+        </div>
+
+        <div id="parsedInfo" class="parsed-info"></div>
+        <div id="errorMsg" class="error-msg" style="display:none"></div>
+        <div id="results" class="results"></div>
+        <div id="emptyState" class="empty-state">
+            <p>输入你的需求，开始探索美食吧</p>
+        </div>
+    </div>
+
+    <script>
+        const API_BASE = "";
+
+        const queryInput = document.getElementById("queryInput");
+        const searchBtn = document.getElementById("searchBtn");
+        const parsedInfo = document.getElementById("parsedInfo");
+        const errorMsg = document.getElementById("errorMsg");
+        const resultsDiv = document.getElementById("results");
+        const emptyState = document.getElementById("emptyState");
+
+        queryInput.addEventListener("keydown", function(e) {
+            if (e.key === "Enter") doSearch();
+        });
+
+        function fillQuery(text) {
+            queryInput.value = text;
+            doSearch();
+        }
+
+        async function doSearch() {
+            const query = queryInput.value.trim();
+            if (!query) return;
+
+            searchBtn.disabled = true;
+            searchBtn.textContent = "搜索中...";
+            errorMsg.style.display = "none";
+            parsedInfo.style.display = "none";
+            resultsDiv.innerHTML = '<div class="loading">正在为你寻找餐厅</div>';
+            emptyState.style.display = "none";
+
+            try {
+                const resp = await fetch(API_BASE + "/api/recommend", {
+                    method: "POST",
+                    headers: { "Content-Type": "application/json" },
+                    body: JSON.stringify({ query: query }),
+                });
+
+                if (!resp.ok) {
+                    const err = await resp.json();
+                    throw new Error(err.error || "请求失败");
+                }
+
+                const data = await resp.json();
+                renderParsed(data.parsed);
+                renderResults(data.results);
+            } catch (e) {
+                errorMsg.textContent = "请求失败：" + e.message;
+                errorMsg.style.display = "block";
+                resultsDiv.innerHTML = "";
+            } finally {
+                searchBtn.disabled = false;
+                searchBtn.textContent = "推荐";
+            }
+        }
+
+        function renderParsed(parsed) {
+            let html = '<span style="font-size:0.85em;color:#666;margin-right:8px;">已识别：</span>';
+            let hasTags = false;
+
+            if (parsed.flavors && parsed.flavors.length) {
+                parsed.flavors.forEach(f => { html += `<span class="tag tag-flavor">口味: ${f}</span>`; });
+                hasTags = true;
+            }
+            if (parsed.atmospheres && parsed.atmospheres.length) {
+                parsed.atmospheres.forEach(a => { html += `<span class="tag tag-atmosphere">氛围: ${a}</span>`; });
+                hasTags = true;
+            }
+            if (parsed.price_range) {
+                html += `<span class="tag tag-price">价格: ¥${parsed.price_range[0]}-${parsed.price_range[1]}</span>`;
+                hasTags = true;
+            }
+            if (parsed.categories && parsed.categories.length) {
+                parsed.categories.forEach(c => { html += `<span class="tag tag-category">菜系: ${c}</span>`; });
+                hasTags = true;
+            }
+
+            if (hasTags) {
+                parsedInfo.innerHTML = html;
+                parsedInfo.style.display = "block";
+            }
+        }
+
+        function renderResults(results) {
+            if (!results || results.length === 0) {
+                resultsDiv.innerHTML = '<div class="empty-state"><p>没有找到匹配的餐厅，试试其他描述吧</p></div>';
+                return;
+            }
+
+            let html = "";
+            results.forEach(r => {
+                html += `
+                <div class="result-card">
+                    <div class="card-header">
+                        <h3>${esc(r.name)}</h3>
+                        <span class="match-score">匹配 ${r.match_score}</span>
+                    </div>
+                    <div class="card-meta">
+                        <span>${esc(r.address || "地址未知")}</span>
+                        <span>人均 ¥${r.avg_price || "-"}</span>
+                        <span>评分 ${r.overall_score || "-"}</span>
+                        <span>${r.review_count || 0} 条评价</span>
+                    </div>
+                    <div class="card-tags">
+                        ${(r.flavor_tags || []).map(t => `<span>${esc(t)}</span>`).join("")}
+                        ${(r.atmosphere_tags || []).map(t => `<span>${esc(t)}</span>`).join("")}
+                        ${(r.tags || []).slice(0, 5).map(t => `<span>${esc(t)}</span>`).join("")}
+                    </div>
+                    ${renderSentiment(r.sentiment)}
+                    ${renderDishes(r.top_dishes)}
+                </div>`;
+            });
+
+            resultsDiv.innerHTML = html;
+        }
+
+        function renderSentiment(s) {
+            if (!s) return "";
+            let html = "";
+            const dims = [
+                { key: "taste", label: "口味" },
+                { key: "environment", label: "环境" },
+                { key: "service", label: "服务" },
+                { key: "price", label: "价格" },
+            ];
+            dims.forEach(d => {
+                const val = s[d.key];
+                if (val === undefined || val === 0) return;
+                const pct = Math.min(Math.abs(val) * 100, 100);
+                const cls = val > 0.3 ? "positive" : val < -0.3 ? "negative" : "neutral";
+                html += `
+                <div class="sentiment-bar">
+                    <label>${d.label}</label>
+                    <div class="bar-track"><div class="bar-fill ${cls}" style="width:${pct}%"></div></div>
+                </div>`;
+            });
+            return html;
+        }
+
+        function renderDishes(dishes) {
+            if (!dishes || dishes.length === 0) return "";
+            let html = '<div class="card-dishes"><h4>推荐菜品</h4>';
+            dishes.forEach(d => {
+                const rate = Math.round(d.positive_rate * 100);
+                html += `<span class="dish-item">${esc(d.name)} <span class="dish-rate">${rate}%好评</span></span>`;
+            });
+            html += "</div>";
+            return html;
+        }
+
+        function esc(str) {
+            const d = document.createElement("div");
+            d.textContent = str;
+            return d.innerHTML;
+        }
+    </script>
+</body>
+</html>

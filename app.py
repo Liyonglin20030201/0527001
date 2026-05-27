@@ -1,4 +1,5 @@
-from flask import Flask, request, jsonify
+import os
+from flask import Flask, request, jsonify, send_from_directory
 from flask_cors import CORS
 
 from config import Config
@@ -7,8 +8,14 @@ from query.builder import QueryBuilder
 from storage.es_storage import ElasticStorage
 
 
-app = Flask(__name__)
+app = Flask(__name__, static_folder="static")
 CORS(app)
+
+
+@app.route("/")
+def index():
+    """前端首页"""
+    return send_from_directory(app.static_folder, "index.html")
 
 query_parser = QueryParser()
 query_builder = QueryBuilder()
