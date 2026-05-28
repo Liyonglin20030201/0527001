@@ -35,7 +35,7 @@ def main():
     print("=" * 50)
 
     if "--init" in sys.argv or "--all" in sys.argv:
-        print("\n[1/2] 初始化数据...")
+        print("\n[1/3] 初始化数据...")
         if not init_data():
             print("数据初始化失败，请检查Elasticsearch是否启动")
             if "--all" not in sys.argv:
@@ -43,8 +43,20 @@ def main():
     else:
         print("\n跳过数据初始化（使用 --init 参数初始化）")
 
+    if "--scheduler" in sys.argv or "--all" in sys.argv:
+        print("\n[2/3] 启动定时调度器...")
+        if os.environ.get("WERKZEUG_RUN_MAIN") == "true" or not Config.FLASK_DEBUG:
+            from monitor.scheduler import DataScheduler
+            scheduler = DataScheduler()
+            scheduler.start()
+            print("  调度器已启动，定期执行数据更新任务")
+        else:
+            print("  (调度器将在reload子进程中启动)")
+    else:
+        print("\n跳过调度器（使用 --scheduler 参数启用）")
+
     if "--no-server" not in sys.argv:
-        print(f"\n[2/2] 启动Flask服务 @ http://{Config.FLASK_HOST}:{Config.FLASK_PORT}")
+        print(f"\n[3/3] 启动Flask服务 @ http://{Config.FLASK_HOST}:{Config.FLASK_PORT}")
         print("按 Ctrl+C 停止服务\n")
         from app import app
         app.run(host=Config.FLASK_HOST, port=Config.FLASK_PORT, debug=Config.FLASK_DEBUG)

@@ -219,6 +219,8 @@ __marimo__/
 
 # Project-specific
 data/reviews.jsonl
+data/app.db
+data/aggregated_restaurants.jsonl
 models/
 *.pt
 *.bin

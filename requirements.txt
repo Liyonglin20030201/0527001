@@ -14,6 +14,12 @@ jieba==0.42.1
 # Elasticsearch
 elasticsearch==8.11.0
 
+# Scheduler
+apscheduler==3.10.4
+
+# Fuzzy text matching (deduplication)
+rapidfuzz==3.6.1
+
 # Utilities
 python-dotenv==1.0.0
 gunicorn==21.2.0

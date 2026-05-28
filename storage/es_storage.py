@@ -36,6 +36,8 @@ RESTAURANT_MAPPING = {
             "review_count": {"type": "integer"},
             "flavor_tags": {"type": "keyword"},
             "atmosphere_tags": {"type": "keyword"},
+            "source_platforms": {"type": "keyword"},
+            "confidence_score": {"type": "float"},
         }
     },
     "settings": {

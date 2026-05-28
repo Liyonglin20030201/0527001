@@ -308,6 +308,81 @@
             margin-bottom: 20px;
         }
 
+        /* 用户区域 */
+        .user-bar {
+            display: flex;
+            justify-content: flex-end;
+            align-items: center;
+            gap: 12px;
+            margin-bottom: 16px;
+        }
+
+        .user-bar .user-info {
+            color: #fff;
+            font-size: 0.9em;
+            opacity: 0.9;
+        }
+
+        .user-bar button {
+            padding: 6px 14px;
+            border: 1px solid rgba(255,255,255,0.5);
+            background: rgba(255,255,255,0.1);
+            color: #fff;
+            border-radius: 8px;
+            font-size: 0.85em;
+            cursor: pointer;
+            transition: background 0.2s;
+        }
+
+        .user-bar button:hover {
+            background: rgba(255,255,255,0.2);
+        }
+
+        .profile-hint {
+            background: rgba(255,255,255,0.15);
+            color: #fff;
+            padding: 10px 16px;
+            border-radius: 10px;
+            font-size: 0.85em;
+            margin-bottom: 16px;
+            text-align: center;
+        }
+
+        .fav-btn {
+            background: none;
+            border: none;
+            font-size: 1.2em;
+            cursor: pointer;
+            padding: 4px 8px;
+            border-radius: 6px;
+            transition: transform 0.2s;
+        }
+
+        .fav-btn:hover { transform: scale(1.2); }
+        .fav-btn.active { color: #e74c3c; }
+
+        .nav-links {
+            display: flex;
+            justify-content: center;
+            gap: 16px;
+            margin-bottom: 20px;
+        }
+
+        .nav-links a {
+            color: rgba(255,255,255,0.8);
+            text-decoration: none;
+            font-size: 0.85em;
+            padding: 4px 12px;
+            border: 1px solid rgba(255,255,255,0.3);
+            border-radius: 6px;
+            transition: all 0.2s;
+        }
+
+        .nav-links a:hover {
+            background: rgba(255,255,255,0.15);
+            color: #fff;
+        }
+
         @media (max-width: 600px) {
             .input-row { flex-direction: column; }
             .input-row button { width: 100%; }
@@ -318,10 +393,27 @@
 </head>
 <body>
     <div class="container">
+        <!-- 用户栏 -->
+        <div class="user-bar">
+            <span class="user-info" id="userInfo" style="display:none"></span>
+            <button id="loginBtn" onclick="showLogin()">登录/注册</button>
+            <button id="logoutBtn" onclick="doLogout()" style="display:none">退出</button>
+        </div>
+
         <div class="header">
             <h1>餐厅智能推荐</h1>
             <p>告诉我你想吃什么，帮你找到最合适的餐厅</p>
         </div>
+
+        <!-- 导航链接 -->
+        <div class="nav-links">
+            <a href="#" onclick="showFavorites()">我的收藏</a>
+            <a href="#" onclick="showTrends()">热门趋势</a>
+            <a href="#" onclick="showProfile()">我的口味</a>
+        </div>
+
+        <!-- 个性化提示 -->
+        <div id="profileHint" class="profile-hint" style="display:none"></div>
 
         <div class="search-box">
             <label>描述你的用餐需求</label>
@@ -349,6 +441,7 @@
 
     <script>
         const API_BASE = "";
+        let currentUser = null;
 
         const queryInput = document.getElementById("queryInput");
         const searchBtn = document.getElementById("searchBtn");
@@ -356,6 +449,10 @@
         const errorMsg = document.getElementById("errorMsg");
         const resultsDiv = document.getElementById("results");
         const emptyState = document.getElementById("emptyState");
+        const userInfo = document.getElementById("userInfo");
+        const loginBtn = document.getElementById("loginBtn");
+        const logoutBtn = document.getElementById("logoutBtn");
+        const profileHint = document.getElementById("profileHint");
 
         queryInput.addEventListener("keydown", function(e) {
             if (e.key === "Enter") doSearch();
@@ -365,6 +462,75 @@
             queryInput.value = text;
             doSearch();
         }
+
+        // ========== 用户相关 ==========
+
+        function showLogin() {
+            const nickname = prompt("请输入昵称（新用户自动注册）：");
+            if (!nickname) return;
+            doLogin(nickname);
+        }
+
+        async function doLogin(nickname) {
+            try {
+                let resp = await fetch(API_BASE + "/api/user/login", {
+                    method: "POST",
+                    headers: { "Content-Type": "application/json" },
+                    credentials: "include",
+                    body: JSON.stringify({ nickname }),
+                });
+
+                if (resp.status === 404) {
+                    resp = await fetch(API_BASE + "/api/user/register", {
+                        method: "POST",
+                        headers: { "Content-Type": "application/json" },
+                        credentials: "include",
+                        body: JSON.stringify({ nickname }),
+                    });
+                }
+
+                if (resp.ok) {
+                    const data = await resp.json();
+                    currentUser = data;
+                    userInfo.textContent = data.nickname;
+                    userInfo.style.display = "inline";
+                    loginBtn.style.display = "none";
+                    logoutBtn.style.display = "inline";
+                    if (data.token) localStorage.setItem("user_token", data.token);
+                    checkProfile();
+                }
+            } catch (e) {
+                console.error("登录失败:", e);
+            }
+        }
+
+        function doLogout() {
+            currentUser = null;
+            userInfo.style.display = "none";
+            loginBtn.style.display = "inline";
+            logoutBtn.style.display = "none";
+            profileHint.style.display = "none";
+            localStorage.removeItem("user_token");
+        }
+
+        async function checkProfile() {
+            try {
+                const resp = await fetch(API_BASE + "/api/user/profile", { credentials: "include" });
+                if (resp.ok) {
+                    const data = await resp.json();
+                    if (!data.ready) {
+                        profileHint.textContent = `正在了解你的口味... (已记录 ${data.event_count}/5 次行为)`;
+                        profileHint.style.display = "block";
+                    } else {
+                        profileHint.textContent = "已启用个性化推荐";
+                        profileHint.style.display = "block";
+                        setTimeout(() => { profileHint.style.display = "none"; }, 3000);
+                    }
+                }
+            } catch (e) {}
+        }
+
+        // ========== 搜索 ==========
 
         async function doSearch() {
             const query = queryInput.value.trim();
@@ -381,6 +547,7 @@
                 const resp = await fetch(API_BASE + "/api/recommend", {
                     method: "POST",
                     headers: { "Content-Type": "application/json" },
+                    credentials: "include",
                     body: JSON.stringify({ query: query }),
                 });
 
@@ -391,6 +558,10 @@
 
                 const data = await resp.json();
                 renderParsed(data.parsed);
+                if (data.personalized) {
+                    profileHint.textContent = "已根据你的口味偏好调整排序";
+                    profileHint.style.display = "block";
+                }
                 renderResults(data.results);
             } catch (e) {
                 errorMsg.textContent = "请求失败：" + e.message;
@@ -401,6 +572,100 @@
                 searchBtn.textContent = "推荐";
             }
         }
+
+        // ========== 收藏 & 行为追踪 ==========
+
+        async function toggleFavorite(restaurantId, btn) {
+            if (!currentUser) { showLogin(); return; }
+            const isFav = btn.classList.contains("active");
+            const method = isFav ? "DELETE" : "POST";
+            try {
+                await fetch(API_BASE + `/api/user/favorites/${restaurantId}`, {
+                    method, credentials: "include",
+                });
+                btn.classList.toggle("active");
+                btn.textContent = btn.classList.contains("active") ? "❤️" : "♡";
+            } catch (e) {}
+        }
+
+        async function trackClick(restaurantId) {
+            if (!currentUser) return;
+            fetch(API_BASE + "/api/user/track", {
+                method: "POST",
+                headers: { "Content-Type": "application/json" },
+                credentials: "include",
+                body: JSON.stringify({ event_type: "click", restaurant_id: restaurantId }),
+            }).catch(() => {});
+        }
+
+        // ========== 导航页面 ==========
+
+        async function showFavorites() {
+            if (!currentUser) { showLogin(); return; }
+            try {
+                const resp = await fetch(API_BASE + "/api/user/favorites", { credentials: "include" });
+                const data = await resp.json();
+                if (data.favorites && data.favorites.length > 0) {
+                    resultsDiv.innerHTML = '<h3 style="color:#fff;margin-bottom:16px;">我的收藏</h3>' +
+                        data.favorites.map(f => `<div class="result-card"><div class="card-header"><h3>${esc(f.restaurant_id)}</h3></div><div class="card-meta"><span>收藏于 ${f.created_at}</span></div></div>`).join("");
+                } else {
+                    resultsDiv.innerHTML = '<div class="empty-state"><p>还没有收藏的餐厅</p></div>';
+                }
+                emptyState.style.display = "none";
+            } catch (e) { console.error(e); }
+        }
+
+        async function showTrends() {
+            try {
+                const resp = await fetch(API_BASE + "/api/monitor/trends");
+                const data = await resp.json();
+                if (data.trending && data.trending.length > 0) {
+                    resultsDiv.innerHTML = '<h3 style="color:#fff;margin-bottom:16px;">热门趋势 (近7天)</h3>' +
+                        data.trending.map(t => {
+                            let badges = "";
+                            if (t.review_growth > 0) badges += `<span class="tag tag-flavor">评论增长 ${t.review_growth}%</span>`;
+                            if (t.score_change !== 0) badges += `<span class="tag tag-atmosphere">评分变化 ${t.score_change > 0 ? "+" : ""}${t.score_change}</span>`;
+                            return `<div class="result-card"><div class="card-header"><h3>${esc(t.name)}</h3></div><div class="card-tags">${badges}</div></div>`;
+                        }).join("");
+                } else {
+                    resultsDiv.innerHTML = '<div class="empty-state"><p>暂无趋势数据 (需要累积快照)</p></div>';
+                }
+                emptyState.style.display = "none";
+            } catch (e) { console.error(e); }
+        }
+
+        async function showProfile() {
+            if (!currentUser) { showLogin(); return; }
+            try {
+                const resp = await fetch(API_BASE + "/api/user/profile", { credentials: "include" });
+                const data = await resp.json();
+                let html = '<h3 style="color:#fff;margin-bottom:16px;">我的口味画像</h3><div class="result-card">';
+                if (!data.ready) {
+                    html += `<p>还需要更多行为来了解你 (${data.event_count}/5)</p><p style="color:#999;margin-top:8px">多搜索、点击、收藏餐厅，系统就能学习你的偏好啦</p>`;
+                } else {
+                    html += renderProfileSection("口味偏好", data.flavor_preferences, "tag-flavor");
+                    html += renderProfileSection("氛围偏好", data.atmosphere_preferences, "tag-atmosphere");
+                    html += renderProfileSection("菜系偏好", data.category_preferences, "tag-category");
+                    html += `<p style="margin-top:12px;color:#666">价格范围: ¥${data.price_range[0]} - ¥${data.price_range[1]}</p>`;
+                }
+                html += '</div>';
+                resultsDiv.innerHTML = html;
+                emptyState.style.display = "none";
+            } catch (e) { console.error(e); }
+        }
+
+        function renderProfileSection(title, prefs, tagClass) {
+            if (!prefs || Object.keys(prefs).length === 0) return "";
+            let html = `<p style="margin:10px 0 6px;font-weight:600;color:#555">${title}</p><div class="card-tags">`;
+            const sorted = Object.entries(prefs).sort((a, b) => b[1] - a[1]);
+            sorted.forEach(([k, v]) => {
+                const pct = Math.round(v * 100);
+                html += `<span class="tag ${tagClass}">${k} ${pct}%</span>`;
+            });
+            return html + '</div>';
+        }
+
+        // ========== 渲染 ==========
 
         function renderParsed(parsed) {
             let html = '<span style="font-size:0.85em;color:#666;margin-right:8px;">已识别：</span>';
@@ -438,10 +703,13 @@
             let html = "";
             results.forEach(r => {
                 html += `
-                <div class="result-card">
+                <div class="result-card" onclick="trackClick('${r.id}')">
                     <div class="card-header">
                         <h3>${esc(r.name)}</h3>
-                        <span class="match-score">匹配 ${r.match_score}</span>
+                        <div style="display:flex;align-items:center;gap:8px">
+                            <button class="fav-btn" onclick="event.stopPropagation();toggleFavorite('${r.id}', this)">♡</button>
+                            <span class="match-score">匹配 ${r.personalized_score || r.match_score}</span>
+                        </div>
                     </div>
                     <div class="card-meta">
                         <span>${esc(r.address || "地址未知")}</span>
@@ -501,6 +769,28 @@
             d.textContent = str;
             return d.innerHTML;
         }
+
+        // ========== 初始化 ==========
+        (function init() {
+            const token = localStorage.getItem("user_token");
+            if (token) {
+                fetch(API_BASE + "/api/user/login", {
+                    method: "POST",
+                    headers: { "Content-Type": "application/json" },
+                    credentials: "include",
+                    body: JSON.stringify({ token }),
+                }).then(r => r.ok ? r.json() : null).then(data => {
+                    if (data) {
+                        currentUser = data;
+                        userInfo.textContent = data.nickname;
+                        userInfo.style.display = "inline";
+                        loginBtn.style.display = "none";
+                        logoutBtn.style.display = "inline";
+                        checkProfile();
+                    }
+                }).catch(() => {});
+            }
+        })();
     </script>
 </body>
 </html>

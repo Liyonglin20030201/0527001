@@ -12,6 +12,7 @@ class RestaurantItem(scrapy.Item):
     url = scrapy.Field()
     tags = scrapy.Field()
     recommended_dishes = scrapy.Field()
+    source_platform = scrapy.Field()
 
 
 class ReviewItem(scrapy.Item):
@@ -23,3 +24,4 @@ class ReviewItem(scrapy.Item):
     content = scrapy.Field()
     date = scrapy.Field()
     dishes_mentioned = scrapy.Field()
+    source_platform = scrapy.Field()

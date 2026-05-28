@@ -17,3 +17,8 @@ class Config:
 
     SCRAPY_CITY = os.getenv("SCRAPY_CITY", "beijing")
     SCRAPY_MAX_PAGES = int(os.getenv("SCRAPY_MAX_PAGES", 10))
+
+    PLATFORMS = os.getenv("PLATFORMS", "dianping,meituan,eleme").split(",")
+    SCHEDULER_INTERVAL_HOURS = int(os.getenv("SCHEDULER_INTERVAL_HOURS", 6))
+    SQLITE_PATH = os.getenv("SQLITE_PATH", "data/app.db")
+    SECRET_KEY = os.getenv("SECRET_KEY", "dev-secret-key-change-in-production")
