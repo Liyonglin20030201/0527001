@@ -170,6 +170,63 @@ def _extract_atmosphere_tags(reviews):
     return [tag for tag, count in tag_counts.items() if count >= threshold]
 
 
+def load_aggregated_data(aggregated_path):
+    """从聚合结果文件加载餐厅数据
+
+    读取 run_aggregator.py 产出的 aggregated_restaurants.jsonl，
+    转换为 ES 可索引的文档格式。
+
+    Args:
+        aggregated_path: aggregated_restaurants.jsonl 文件路径
+
+    Returns:
+        list of dict: ES 文档列表
+    """
+    docs = []
+    with open(aggregated_path, "r", encoding="utf-8") as f:
+        for line in f:
+            if not line.strip():
+                continue
+            data = json.loads(line)
+            doc = _build_aggregated_document(data)
+            docs.append(doc)
+    return docs
+
+
+def _build_aggregated_document(data):
+    """将聚合记录转换为 ES 文档格式"""
+    doc = {
+        "name": data.get("name", ""),
+        "address": data.get("address", ""),
+        "phone": data.get("phone", ""),
+        "category": data.get("category", []),
+        "tags": data.get("tags", []),
+        "recommended_dishes": data.get("recommended_dishes", []),
+        "review_count": data.get("review_count", 0),
+        "source_platforms": data.get("source_platforms", []),
+        "confidence_score": data.get("confidence_score", 0.0),
+    }
+
+    try:
+        doc["avg_price"] = float(data.get("avg_price", 0))
+    except (ValueError, TypeError):
+        doc["avg_price"] = 0.0
+
+    try:
+        doc["overall_score"] = float(data.get("overall_score", 0))
+    except (ValueError, TypeError):
+        doc["overall_score"] = 0.0
+
+    doc["sentiment_summary"] = data.get("sentiment_summary", {
+        "overall": 0.0, "taste": 0.0, "environment": 0.0, "service": 0.0, "price": 0.0,
+    })
+    doc["dish_sentiments"] = data.get("dish_sentiments", [])
+    doc["flavor_tags"] = data.get("flavor_tags", [])
+    doc["atmosphere_tags"] = data.get("atmosphere_tags", [])
+
+    return doc
+
+
 def import_to_es(docs):
     """将文档导入Elasticsearch"""
     storage = ElasticStorage()
@@ -178,11 +235,51 @@ def import_to_es(docs):
     return len(docs)
 
 
-if __name__ == "__main__":
-    data_dir = os.path.join(os.path.dirname(__file__), "..", "data")
-    docs = aggregate_restaurant_data(
-        os.path.join(data_dir, "restaurants.jsonl"),
-        os.path.join(data_dir, "reviews_analyzed.jsonl"),
-    )
+def import_aggregated_to_es(aggregated_path=None):
+    """从聚合数据文件直接导入ES（完整链路入口）
+
+    Args:
+        aggregated_path: 聚合数据文件路径，默认 data/aggregated_restaurants.jsonl
+
+    Returns:
+        int: 导入的文档数
+    """
+    if aggregated_path is None:
+        aggregated_path = os.path.join(
+            os.path.dirname(__file__), "..", "data", "aggregated_restaurants.jsonl"
+        )
+
+    if not os.path.exists(aggregated_path):
+        print(f"聚合数据文件不存在: {aggregated_path}")
+        print("请先运行 python run_aggregator.py 生成聚合数据")
+        return 0
+
+    docs = load_aggregated_data(aggregated_path)
+    if not docs:
+        print("聚合数据为空")
+        return 0
+
     count = import_to_es(docs)
-    print(f"成功导入 {count} 家餐厅数据到 Elasticsearch")
+    return count
+
+
+if __name__ == "__main__":
+    import sys
+
+    data_dir = os.path.join(os.path.dirname(__file__), "..", "data")
+
+    if "--aggregated" in sys.argv:
+        aggregated_path = os.path.join(data_dir, "aggregated_restaurants.jsonl")
+        count = import_aggregated_to_es(aggregated_path)
+        print(f"从聚合数据导入 {count} 家餐厅到 Elasticsearch")
+    else:
+        restaurants_path = os.path.join(data_dir, "restaurants.jsonl")
+        reviews_path = os.path.join(data_dir, "reviews_analyzed.jsonl")
+
+        if os.path.exists(restaurants_path):
+            docs = aggregate_restaurant_data(restaurants_path, reviews_path)
+            count = import_to_es(docs)
+            print(f"从原始数据导入 {count} 家餐厅到 Elasticsearch")
+        else:
+            count = import_aggregated_to_es()
+            print(f"从聚合数据导入 {count} 家餐厅到 Elasticsearch")

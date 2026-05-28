@@ -129,3 +129,16 @@ class TrendTracker:
 
         trending.sort(key=lambda x: x["review_growth"] + abs(x["score_change"]), reverse=True)
         return trending
+
+    def get_trending_names(self, days=7):
+        """获取热门餐厅名称集合（供推荐接口快速查询）
+
+        Returns:
+            dict: {restaurant_name: trend_score}，trend_score 越高越热门
+        """
+        trending = self.get_trending(days=days)
+        names = {}
+        for t in trending:
+            score = t["review_growth"] / 100.0 + abs(t["score_change"])
+            names[t["name"]] = round(score, 3)
+        return names

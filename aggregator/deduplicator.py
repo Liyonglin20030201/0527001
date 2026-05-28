@@ -10,8 +10,8 @@ class RestaurantDeduplicator:
     避免连锁店不同门店被误合并（如 "鼎泰丰三里屯店" vs "鼎泰丰国贸店"）
     """
 
-    NAME_THRESHOLD = 85
-    ADDR_THRESHOLD = 80
+    NAME_THRESHOLD = 75
+    ADDR_THRESHOLD = 75
 
     def deduplicate(self, records):
         """将餐厅记录按同一实体分组
@@ -44,6 +44,10 @@ class RestaurantDeduplicator:
         name_b = self._normalize_name(b.get("name", ""))
 
         name_score = fuzz.token_sort_ratio(name_a, name_b)
+
+        if name_score >= 95:
+            return True
+
         if name_score < self.NAME_THRESHOLD:
             return False
 
@@ -51,15 +55,17 @@ class RestaurantDeduplicator:
         addr_b = b.get("address", "")
 
         if not addr_a or not addr_b:
-            return name_score >= 95
+            return name_score >= 90
 
         addr_score = fuzz.token_sort_ratio(addr_a, addr_b)
         return addr_score >= self.ADDR_THRESHOLD
 
     def _normalize_name(self, name):
         """去除常见后缀以提高匹配率"""
-        suffixes = ["餐厅", "饭店", "酒楼", "馆", "店", "坊"]
+        suffixes = ["餐厅", "饭店", "酒楼", "馆", "店", "坊", "麻辣馆", "海鲜酒楼"]
+        suffixes.sort(key=len, reverse=True)
         for s in suffixes:
             if name.endswith(s) and len(name) > len(s) + 1:
                 name = name[:-len(s)]
+                break
         return name.strip()

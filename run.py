@@ -5,28 +5,49 @@ import os
 
 sys.path.insert(0, os.path.dirname(__file__))
 
-from storage.importer import aggregate_restaurant_data, import_to_es
+from storage.importer import aggregate_restaurant_data, import_to_es, import_aggregated_to_es
 from config import Config
 
 
 def init_data():
-    """初始化示例数据到ES"""
+    """初始化数据到ES
+
+    优先使用原始数据（restaurants.jsonl + reviews_analyzed.jsonl），
+    如果原始数据不存在，则尝试使用聚合数据（aggregated_restaurants.jsonl），
+    如果聚合数据也不存在，则先运行聚合流程再导入。
+    """
     data_dir = os.path.join(os.path.dirname(__file__), "data")
     restaurants_path = os.path.join(data_dir, "restaurants.jsonl")
     reviews_path = os.path.join(data_dir, "reviews_analyzed.jsonl")
+    aggregated_path = os.path.join(data_dir, "aggregated_restaurants.jsonl")
 
-    if not os.path.exists(restaurants_path):
-        print("错误：找不到餐厅数据文件")
-        return False
+    if os.path.exists(restaurants_path):
+        print("使用原始数据导入...")
+        docs = aggregate_restaurant_data(restaurants_path, reviews_path)
+        print(f"聚合完成，共 {len(docs)} 家餐厅")
+        print("正在导入 Elasticsearch...")
+        count = import_to_es(docs)
+        print(f"成功导入 {count} 家餐厅")
+        return True
 
-    print("正在聚合数据...")
-    docs = aggregate_restaurant_data(restaurants_path, reviews_path)
-    print(f"聚合完成，共 {len(docs)} 家餐厅")
+    if not os.path.exists(aggregated_path):
+        print("原始数据不存在，先运行多平台聚合...")
+        try:
+            from run_aggregator import main as run_aggregate
+            run_aggregate()
+        except Exception as e:
+            print(f"聚合失败: {e}")
+            return False
 
-    print("正在导入 Elasticsearch...")
-    count = import_to_es(docs)
-    print(f"成功导入 {count} 家餐厅")
-    return True
+    if os.path.exists(aggregated_path):
+        print("使用聚合数据导入...")
+        count = import_aggregated_to_es(aggregated_path)
+        if count > 0:
+            print(f"成功导入 {count} 家餐厅")
+            return True
+
+    print("错误：没有可用的数据源")
+    return False
 
 
 def main():

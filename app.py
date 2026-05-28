@@ -12,6 +12,7 @@ from user.tracker import BehaviorTracker
 from user.profile_builder import ProfileBuilder
 from user.recommender import PersonalizedRecommender
 from monitor.dashboard import monitor_bp, init_monitor
+from monitor.trend_tracker import TrendTracker
 
 
 app = Flask(__name__, static_folder="static")
@@ -34,6 +35,7 @@ user_db = UserDB()
 tracker = BehaviorTracker(user_db)
 profile_builder = ProfileBuilder(user_db)
 recommender = PersonalizedRecommender()
+trend_tracker = TrendTracker()
 
 
 @app.route("/api/recommend", methods=["POST"])
@@ -68,6 +70,7 @@ def recommend():
         return jsonify({"error": f"搜索服务异常: {str(e)}"}), 500
 
     results = _format_results(response)
+    results = _apply_trending_boost(results)
 
     personalized = False
     user_id = session.get("user_id")
@@ -241,6 +244,143 @@ def remove_favorite(restaurant_id):
 
     tracker.remove_favorite(user_id, restaurant_id)
     return jsonify({"success": True})
+
+
+# ============================
+# 智能推荐接口
+# ============================
+
+@app.route("/api/guess-you-like", methods=["GET"])
+def guess_you_like():
+    """猜你喜欢 — 基于用户画像推荐
+
+    未登录或画像不足时，返回高评分热门餐厅。
+    已有画像时，根据口味/氛围/菜系偏好从ES查询匹配餐厅。
+    """
+    user_id = session.get("user_id")
+    size = request.args.get("size", 6, type=int)
+
+    if user_id:
+        profile = profile_builder.build_profile(user_id)
+        if profile.get("ready"):
+            favorites = tracker.get_favorites(user_id)
+            exclude_ids = [f["restaurant_id"] for f in favorites]
+
+            categories = list(profile.get("category_preferences", {}).keys())[:3]
+            flavors = list(profile.get("flavor_preferences", {}).keys())[:3]
+            atmospheres = list(profile.get("atmosphere_preferences", {}).keys())[:2]
+            price_range = profile.get("price_range", [0, 200])
+
+            try:
+                response = storage.search_by_tags(
+                    categories=categories,
+                    flavor_tags=flavors,
+                    atmosphere_tags=atmospheres,
+                    price_range=price_range,
+                    exclude_ids=exclude_ids,
+                    size=size,
+                )
+                results = _format_results(response)
+                results = recommender.rerank(results, profile)
+                return jsonify({
+                    "results": results,
+                    "source": "personalized",
+                    "total": len(results),
+                })
+            except Exception:
+                pass
+
+    try:
+        response = storage.get_top_rated(size=size)
+        results = _format_results(response)
+        results = _apply_trending_boost(results)
+        return jsonify({
+            "results": results,
+            "source": "popular",
+            "total": len(results),
+        })
+    except Exception as e:
+        return jsonify({"error": f"推荐服务异常: {str(e)}"}), 500
+
+
+@app.route("/api/restaurant/<doc_id>/similar", methods=["GET"])
+def similar_restaurants(doc_id):
+    """相似餐厅推荐
+
+    基于目标餐厅的标签、菜系、口味，查找最相似的其他餐厅。
+    使用 ES more_like_this 查询 + 标签匹配双重策略。
+    """
+    size = request.args.get("size", 5, type=int)
+
+    try:
+        target = storage.get_restaurant(doc_id)
+    except Exception:
+        return jsonify({"error": "餐厅不存在"}), 404
+
+    source = target["_source"]
+
+    try:
+        response = storage.find_similar(doc_id, size=size)
+        results = _format_results(response)
+
+        if len(results) < size:
+            fallback_response = storage.search_by_tags(
+                categories=source.get("category", []),
+                flavor_tags=source.get("flavor_tags", []),
+                atmosphere_tags=source.get("atmosphere_tags", []),
+                exclude_ids=[doc_id] + [r["id"] for r in results],
+                size=size - len(results),
+            )
+            results.extend(_format_results(fallback_response))
+
+    except Exception:
+        try:
+            response = storage.search_by_tags(
+                categories=source.get("category", []),
+                flavor_tags=source.get("flavor_tags", []),
+                atmosphere_tags=source.get("atmosphere_tags", []),
+                exclude_ids=[doc_id],
+                size=size,
+            )
+            results = _format_results(response)
+        except Exception as e:
+            return jsonify({"error": f"推荐服务异常: {str(e)}"}), 500
+
+    if session.get("user_id"):
+        tracker.track_click(session["user_id"], doc_id)
+
+    return jsonify({
+        "target": {
+            "id": doc_id,
+            "name": source.get("name", ""),
+            "category": source.get("category", []),
+        },
+        "similar": results,
+        "total": len(results),
+    })
+
+
+def _apply_trending_boost(results):
+    """对热门趋势餐厅的匹配分加权提升"""
+    trending_names = trend_tracker.get_trending_names(days=7)
+    if not trending_names:
+        return results
+
+    TREND_BOOST = 0.15
+
+    for r in results:
+        name = r.get("name", "")
+        if name in trending_names:
+            trend_score = trending_names[name]
+            boost = TREND_BOOST * min(trend_score, 2.0)
+            r["match_score"] = round(r["match_score"] * (1 + boost), 2)
+            r["is_trending"] = True
+            r["trend_info"] = trending_names[name]
+        else:
+            r["is_trending"] = False
+
+    results.sort(key=lambda x: x.get("match_score", 0), reverse=True)
+    return results
 
 
 def _format_results(response):

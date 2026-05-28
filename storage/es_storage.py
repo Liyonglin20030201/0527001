@@ -100,3 +100,81 @@ class ElasticStorage:
     def get_restaurant(self, doc_id):
         """获取单个餐厅文档"""
         return self.es.get(index=self.index, id=doc_id)
+
+    def search_by_tags(self, categories=None, flavor_tags=None, atmosphere_tags=None,
+                       price_range=None, exclude_ids=None, size=10):
+        """按标签组合搜索餐厅（用于猜你喜欢和相似推荐）"""
+        must = []
+        should = []
+        filter_clauses = []
+
+        if categories:
+            should.append({"terms": {"category": categories, "boost": 2.0}})
+        if flavor_tags:
+            should.append({"terms": {"flavor_tags": flavor_tags, "boost": 1.5}})
+        if atmosphere_tags:
+            should.append({"terms": {"atmosphere_tags": atmosphere_tags, "boost": 1.5}})
+        if price_range:
+            filter_clauses.append({
+                "range": {"avg_price": {"gte": price_range[0], "lte": price_range[1]}}
+            })
+
+        must_not = []
+        if exclude_ids:
+            must_not.append({"ids": {"values": exclude_ids}})
+
+        if not should:
+            should.append({"match_all": {}})
+
+        query_body = {
+            "query": {
+                "bool": {
+                    "must": must,
+                    "should": should,
+                    "filter": filter_clauses,
+                    "must_not": must_not,
+                    "minimum_should_match": 1 if should else 0,
+                }
+            },
+            "sort": [
+                {"_score": {"order": "desc"}},
+                {"overall_score": {"order": "desc"}},
+            ],
+            "size": size,
+        }
+        return self.search(query_body)
+
+    def find_similar(self, doc_id, size=5):
+        """基于 more_like_this 查找相似餐厅"""
+        query_body = {
+            "query": {
+                "bool": {
+                    "must": [{
+                        "more_like_this": {
+                            "fields": ["tags", "category", "flavor_tags", "atmosphere_tags", "name"],
+                            "like": [{"_index": self.index, "_id": doc_id}],
+                            "min_term_freq": 1,
+                            "min_doc_freq": 1,
+                            "max_query_terms": 20,
+                        }
+                    }],
+                    "must_not": [{"ids": {"values": [doc_id]}}],
+                }
+            },
+            "size": size,
+        }
+        return self.search(query_body)
+
+    def get_top_rated(self, size=10, min_score=4.0):
+        """获取高评分餐厅"""
+        query_body = {
+            "query": {
+                "range": {"overall_score": {"gte": min_score}}
+            },
+            "sort": [
+                {"overall_score": {"order": "desc"}},
+                {"review_count": {"order": "desc"}},
+            ],
+            "size": size,
+        }
+        return self.search(query_body)
